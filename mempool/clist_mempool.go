@@ -63,6 +63,10 @@ type CListMempool struct {
 
 	logger  log.Logger
 	metrics *Metrics
+
+	// Function set by the reactor to be called a transaction is removed from
+	// the mempool.
+	removeTxOnReactor func(txKey types.TxKey)
 }
 
 var _ Mempool = &CListMempool{}
@@ -139,6 +143,7 @@ func (mem *CListMempool) removeAllTxs() {
 	mem.txsMap.Range(func(key, _ interface{}) bool {
 		mem.txsMap.Delete(key)
 		mem.notifyTxRemoved(key.(types.TxKey))
+		mem.removeTxOnReactor(key.(types.TxKey))
 		return true
 	})
 }
@@ -146,6 +151,10 @@ func (mem *CListMempool) removeAllTxs() {
 // NOTE: not thread safe - should only be called once, on startup
 func (mem *CListMempool) EnableTxsAvailable() {
 	mem.txsAvailable = make(chan struct{}, 1)
+}
+
+func (mem *CListMempool) SetTxsRemovedCallback(cb func(txKey types.TxKey)) {
+	mem.removeTxOnReactor = cb
 }
 
 func (mem *CListMempool) EnableTxsRemoved() {
@@ -324,6 +333,7 @@ func (mem *CListMempool) RemoveTxByKey(txKey types.TxKey) error {
 		elem.DetachPrev()
 		mem.txsMap.Delete(txKey)
 		mem.notifyTxRemoved(txKey)
+		mem.removeTxOnReactor(txKey)
 		tx := elem.Value.(*Entry).tx
 		atomic.AddInt64(&mem.txsBytes, int64(-len(tx)))
 		return nil

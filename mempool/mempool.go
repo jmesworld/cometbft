@@ -109,6 +109,10 @@ type Mempool interface {
 	// EnableTxsRemoved initializes the TxsRemoved channel.
 	EnableTxsRemoved()
 
+	// Set a callback function to be called when a transaction is removed from
+	// the mempool.
+	SetTxsRemovedCallback(cb func(types.TxKey))
+
 	// Size returns the number of transactions in the mempool.
 	Size() int
 

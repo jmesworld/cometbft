@@ -147,6 +147,11 @@ func (_m *Mempool) SetLogger(l log.Logger) {
 	_m.Called(l)
 }
 
+// SetTxsRemovedCallback provides a mock function with given fields: cb
+func (_m *Mempool) SetTxsRemovedCallback(cb func(types.TxKey)) {
+	_m.Called(cb)
+}
+
 // Size provides a mock function with given fields:
 func (_m *Mempool) Size() int {
 	ret := _m.Called()

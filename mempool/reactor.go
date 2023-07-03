@@ -43,6 +43,7 @@ func NewReactor(config *cfg.MempoolConfig, mempool Mempool) *Reactor {
 		txSenders: make(map[types.TxKey]map[uint16]bool),
 	}
 	memR.BaseReactor = *p2p.NewBaseReactor("Mempool", memR)
+	mempool.SetTxsRemovedCallback(func(txKey types.TxKey) { memR.mempool.RemoveTxByKey(txKey) })
 	return memR
 }
 

@@ -149,18 +149,18 @@ func (mem *CListMempool) removeAllTxs() {
 }
 
 // NOTE: not thread safe - should only be called once, on startup
-func (mem *CListMempool) EnableTxsAvailable() {
-	mem.txsAvailable = make(chan struct{}, 1)
+func (mem *CListMempool) InitChannels(notifyAvailable bool) {
+	if notifyAvailable {
+		mem.txsAvailable = make(chan struct{}, 1)
+	}
+
+	// We assign a buffer of size 1024 to allow concurrent writes to the channel
+	// without blocking it.
+	mem.txsRemoved = make(chan types.TxKey, 1024)
 }
 
 func (mem *CListMempool) SetTxsRemovedCallback(cb func(txKey types.TxKey)) {
 	mem.removeTxOnReactor = cb
-}
-
-func (mem *CListMempool) EnableTxsRemoved() {
-	// We assign a buffer of size 1024 to allow concurrent writes to the channel
-	// without blocking it.
-	mem.txsRemoved = make(chan types.TxKey, 1024)
 }
 
 // SetLogger sets the Logger.
@@ -328,11 +328,11 @@ func (mem *CListMempool) addTx(entry *Entry) {
 //   - Update (lock held) if tx was committed
 //   - resCbRecheck (lock not held) if tx was invalidated
 func (mem *CListMempool) RemoveTxByKey(txKey types.TxKey) error {
+	mem.notifyTxRemoved(txKey)
 	if elem, ok := mem.getCElement(txKey); ok {
 		mem.txs.Remove(elem)
 		elem.DetachPrev()
 		mem.txsMap.Delete(txKey)
-		mem.notifyTxRemoved(txKey)
 		mem.removeTxOnReactor(txKey)
 		tx := elem.Value.(*Entry).tx
 		atomic.AddInt64(&mem.txsBytes, int64(-len(tx)))

@@ -16,8 +16,8 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
+	cmtrand "github.com/cometbft/cometbft/libs/rand"
 	mempl "github.com/cometbft/cometbft/mempool"
 	"github.com/cometbft/cometbft/rpc/client"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
@@ -28,27 +28,23 @@ import (
 	"github.com/cometbft/cometbft/types"
 )
 
-var (
-	ctx = context.Background()
-)
+var ctx = context.Background()
 
 func getHTTPClient() *rpchttp.HTTP {
 	rpcAddr := rpctest.GetConfig().RPC.ListenAddress
-	c, err := rpchttp.New(rpcAddr, "/websocket")
+	c, err := rpchttp.New(rpcAddr)
 	if err != nil {
 		panic(err)
 	}
-	c.SetLogger(log.TestingLogger())
 	return c
 }
 
 func getHTTPClientWithTimeout(timeout uint) *rpchttp.HTTP {
 	rpcAddr := rpctest.GetConfig().RPC.ListenAddress
-	c, err := rpchttp.NewWithTimeout(rpcAddr, "/websocket", timeout)
+	c, err := rpchttp.NewWithTimeout(rpcAddr, timeout)
 	if err != nil {
 		panic(err)
 	}
-	c.SetLogger(log.TestingLogger())
 	return c
 }
 
@@ -66,7 +62,7 @@ func GetClients() []client.Client {
 
 func TestNilCustomHTTPClient(t *testing.T) {
 	require.Panics(t, func() {
-		_, _ = rpchttp.NewWithClient("http://example.com", "/websocket", nil)
+		_, _ = rpchttp.NewWithClient("http://example.com", nil)
 	})
 	require.Panics(t, func() {
 		_, _ = rpcclient.NewWithHTTPClient("http://example.com", nil)
@@ -75,7 +71,7 @@ func TestNilCustomHTTPClient(t *testing.T) {
 
 func TestCustomHTTPClient(t *testing.T) {
 	remote := rpctest.GetConfig().RPC.ListenAddress
-	c, err := rpchttp.NewWithClient(remote, "/websocket", http.DefaultClient)
+	c, err := rpchttp.NewWithClient(remote, http.DefaultClient)
 	require.Nil(t, err)
 	status, err := c.Status(context.Background())
 	require.NoError(t, err)
@@ -216,7 +212,7 @@ func TestGenesisChunked(t *testing.T) {
 func TestABCIQuery(t *testing.T) {
 	for i, c := range GetClients() {
 		// write something
-		k, v, tx := MakeTxKV()
+		k, v, tx := makeTxKV()
 		bres, err := c.BroadcastTxCommit(context.Background(), tx)
 		require.Nil(t, err, "%d: %+v", i, err)
 		apph := bres.Height + 1 // this is where the tx will be applied to the state
@@ -249,7 +245,7 @@ func TestAppCalls(t *testing.T) {
 		require.Error(err) // no block yet
 
 		// write something
-		k, v, tx := MakeTxKV()
+		k, v, tx := makeTxKV()
 		bres, err := c.BroadcastTxCommit(context.Background(), tx)
 		require.NoError(err)
 		require.True(bres.TxResult.IsOK())
@@ -346,7 +342,7 @@ func TestBroadcastTxSync(t *testing.T) {
 	initMempoolSize := mempool.Size()
 
 	for i, c := range GetClients() {
-		_, _, tx := MakeTxKV()
+		_, _, tx := makeTxKV()
 		bres, err := c.BroadcastTxSync(context.Background(), tx)
 		require.Nil(err, "%d: %+v", i, err)
 		require.Equal(bres.Code, abci.CodeTypeOK) // FIXME
@@ -364,7 +360,7 @@ func TestBroadcastTxCommit(t *testing.T) {
 
 	mempool := node.Mempool()
 	for i, c := range GetClients() {
-		_, _, tx := MakeTxKV()
+		_, _, tx := makeTxKV()
 		bres, err := c.BroadcastTxCommit(context.Background(), tx)
 		require.Nil(err, "%d: %+v", i, err)
 		require.True(bres.CheckTx.IsOK())
@@ -375,7 +371,7 @@ func TestBroadcastTxCommit(t *testing.T) {
 }
 
 func TestUnconfirmedTxs(t *testing.T) {
-	_, _, tx := MakeTxKV()
+	_, _, tx := makeTxKV()
 
 	ch := make(chan *abci.ResponseCheckTx, 1)
 	mempool := node.Mempool()
@@ -405,7 +401,7 @@ func TestUnconfirmedTxs(t *testing.T) {
 }
 
 func TestNumUnconfirmedTxs(t *testing.T) {
-	_, _, tx := MakeTxKV()
+	_, _, tx := makeTxKV()
 
 	ch := make(chan *abci.ResponseCheckTx, 1)
 	mempool := node.Mempool()
@@ -438,7 +434,7 @@ func TestCheckTx(t *testing.T) {
 	mempool := node.Mempool()
 
 	for _, c := range GetClients() {
-		_, _, tx := MakeTxKV()
+		_, _, tx := makeTxKV()
 
 		res, err := c.CheckTx(context.Background(), tx)
 		require.NoError(t, err)
@@ -451,7 +447,7 @@ func TestCheckTx(t *testing.T) {
 func TestTx(t *testing.T) {
 	// first we broadcast a tx
 	c := getHTTPClient()
-	_, _, tx := MakeTxKV()
+	_, _, tx := makeTxKV()
 	bres, err := c.BroadcastTxCommit(context.Background(), tx)
 	require.Nil(t, err, "%+v", err)
 
@@ -506,7 +502,7 @@ func TestTxSearchWithTimeout(t *testing.T) {
 	// Get a client with a time-out of 10 secs.
 	timeoutClient := getHTTPClientWithTimeout(10)
 
-	_, _, tx := MakeTxKV()
+	_, _, tx := makeTxKV()
 	_, err := timeoutClient.BroadcastTxCommit(context.Background(), tx)
 	require.NoError(t, err)
 
@@ -523,7 +519,7 @@ func TestBlockSearch(t *testing.T) {
 
 	// first we broadcast a few txs
 	for i := 0; i < 10; i++ {
-		_, _, tx := MakeTxKV()
+		_, _, tx := makeTxKV()
 
 		_, err := c.BroadcastTxCommit(context.Background(), tx)
 		require.NoError(t, err)
@@ -539,14 +535,14 @@ func TestBlockSearch(t *testing.T) {
 
 	// otherwise it is 0
 	require.Equal(t, blockCount, 0)
-
 }
+
 func TestTxSearch(t *testing.T) {
 	c := getHTTPClient()
 
 	// first we broadcast a few txs
 	for i := 0; i < 10; i++ {
-		_, _, tx := MakeTxKV()
+		_, _, tx := makeTxKV()
 		_, err := c.BroadcastTxCommit(context.Background(), tx)
 		require.NoError(t, err)
 	}
@@ -671,8 +667,8 @@ func TestBatchedJSONRPCCalls(t *testing.T) {
 }
 
 func testBatchedJSONRPCCalls(t *testing.T, c *rpchttp.HTTP) {
-	k1, v1, tx1 := MakeTxKV()
-	k2, v2, tx2 := MakeTxKV()
+	k1, v1, tx1 := makeTxKV()
+	k2, v2, tx2 := makeTxKV()
 
 	batch := c.NewBatch()
 	r1, err := batch.BroadcastTxCommit(context.Background(), tx1)
@@ -721,8 +717,8 @@ func testBatchedJSONRPCCalls(t *testing.T, c *rpchttp.HTTP) {
 
 func TestBatchedJSONRPCCallsCancellation(t *testing.T) {
 	c := getHTTPClient()
-	_, _, tx1 := MakeTxKV()
-	_, _, tx2 := MakeTxKV()
+	_, _, tx1 := makeTxKV()
+	_, _, tx2 := makeTxKV()
 
 	batch := c.NewBatch()
 	_, err := batch.BroadcastTxCommit(context.Background(), tx1)
@@ -761,4 +757,11 @@ func TestConcurrentJSONRPCBatching(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// makeTxKV returns a text transaction, allong with expected key, value pair
+func makeTxKV() ([]byte, []byte, []byte) {
+	k := []byte(cmtrand.Str(8))
+	v := []byte(cmtrand.Str(8))
+	return k, v, append(k, append([]byte("="), v...)...)
 }

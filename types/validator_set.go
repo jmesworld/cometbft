@@ -164,16 +164,29 @@ func (vals *ValidatorSet) RescalePriorities(diffMax int64) {
 }
 
 func (vals *ValidatorSet) incrementProposerPriority() *Validator {
+	// Get number of validators.
 	for _, val := range vals.Validators {
+		votingPower := val.VotingPower
+		// If is zero, then set to 1.
+		if votingPower == 0 {
+			votingPower = 1
+		}
+
 		// Check for overflow for sum.
-		newPrio := safeAddClip(val.ProposerPriority, val.VotingPower)
-		val.ProposerPriority = newPrio
+		newPriority := safeAddClip(val.ProposerPriority, votingPower)
+
+		val.ProposerPriority = newPriority
 	}
 	// Decrement the validator with most ProposerPriority.
 	mostest := vals.getValWithMostPriority()
-	// Mind the underflow.
-	mostest.ProposerPriority = safeSubClip(mostest.ProposerPriority, vals.TotalVotingPower())
 
+	// Mind the underflow.
+	totalVotingPower := vals.TotalVotingPower()
+
+	if totalVotingPower == 0 {
+		totalVotingPower = 1
+	}
+	mostest.ProposerPriority = safeSubClip(mostest.ProposerPriority, totalVotingPower)
 	return mostest
 }
 
@@ -379,6 +392,7 @@ func processChanges(origChanges []*Validator) (updates, removals []*Validator, e
 	updates = make([]*Validator, 0, len(changes))
 	var prevAddr Address
 
+	zeroVotingPowerCounter := 0
 	// Scan changes by address and append valid validators to updates or removals lists.
 	for _, valUpdate := range changes {
 		if bytes.Equal(valUpdate.Address, prevAddr) {
@@ -395,7 +409,15 @@ func processChanges(origChanges []*Validator) (updates, removals []*Validator, e
 				MaxTotalVotingPower, valUpdate.VotingPower)
 			return nil, nil, err
 		case valUpdate.VotingPower == 0:
-			removals = append(removals, valUpdate)
+			// TODO: uncomment and remove below after IDP.
+			// removals = append(removals, valUpdate)
+			zeroVotingPowerCounter++
+			// While we allow to have a 0 VP validator in the set, we don't allow more than 250 of them.
+			if zeroVotingPowerCounter < 250 {
+				updates = append(updates, valUpdate)
+			} else {
+				removals = append(removals, valUpdate)
+			}
 		default:
 			updates = append(updates, valUpdate)
 		}

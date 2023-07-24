@@ -219,14 +219,14 @@ func verifyCommitBatch(
 
 		// if we don't need to verify all signatures and already have sufficient
 		// voting power we can break from batching and verify all the signatures
-		if !countAllSignatures && talliedVotingPower > votingPowerNeeded {
+		if !countAllSignatures && talliedVotingPower > votingPowerNeeded || (talliedVotingPower == 0 && votingPowerNeeded == 0) {
 			break
 		}
 	}
 
 	// ensure that we have batched together enough signatures to exceed the
 	// voting power needed else there is no need to even verify
-	if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed {
+	if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed && needed > 0 {
 		return ErrNotEnoughVotingPowerSigned{Got: got, Needed: needed}
 	}
 
@@ -319,12 +319,12 @@ func verifyCommitSingle(
 		}
 
 		// check if we have enough signatures and can thus exit early
-		if !countAllSignatures && talliedVotingPower > votingPowerNeeded {
+		if !countAllSignatures && talliedVotingPower > votingPowerNeeded || (talliedVotingPower == 0 && votingPowerNeeded == 0) {
 			return nil
 		}
 	}
 
-	if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed {
+	if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed && needed > 0 {
 		return ErrNotEnoughVotingPowerSigned{Got: got, Needed: needed}
 	}
 

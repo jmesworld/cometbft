@@ -306,11 +306,16 @@ func (voteSet *VoteSet) addVerifiedVote(
 	origSum := votesByBlock.sum
 	quorum := voteSet.valSet.TotalVotingPower()*2/3 + 1
 
+	// Specific case for stake-free period
+	//TODO: remove this after IDP period
+	if voteSet.valSet.TotalVotingPower() == 0 {
+		quorum = 0
+	}
 	// Add vote to votesByBlock
 	votesByBlock.addVerifiedVote(vote, votingPower)
 
 	// If we just crossed the quorum threshold and have 2/3 majority...
-	if origSum < quorum && quorum <= votesByBlock.sum {
+	if (origSum == 0 && quorum == 0 || origSum < quorum) && quorum <= votesByBlock.sum {
 		// Only consider the first quorum reached
 		if voteSet.maj23 == nil {
 			maj23BlockID := vote.BlockID
@@ -456,6 +461,10 @@ func (voteSet *VoteSet) HasTwoThirdsAny() bool {
 	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
+	if voteSet.valSet.TotalVotingPower()*2/3 == 0 {
+		// TODO: Remove after IDP
+		return true
+	}
 	return voteSet.sum > voteSet.valSet.TotalVotingPower()*2/3
 }
 
@@ -621,7 +630,11 @@ func (voteSet *VoteSet) LogString() string {
 // return the power voted, the total, and the fraction
 func (voteSet *VoteSet) sumTotalFrac() (int64, int64, float64) {
 	voted, total := voteSet.sum, voteSet.valSet.TotalVotingPower()
-	fracVoted := float64(voted) / float64(total)
+	fracVoted := 0.0
+	// Only calculate the fraction if total is not zero
+	if total != 0 {
+		fracVoted = float64(voted) / float64(total)
+	}
 	return voted, total, fracVoted
 }
 

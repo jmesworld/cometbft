@@ -2378,6 +2378,16 @@ func (cs *State) calculatePrevoteMessageDelayMetrics() {
 		}
 	}
 	if ps.HasAll() {
+		if len(pl) < 1 {
+			fmt.Printf("ERROR: prevotes.hasAll() but len(prevotes) < 1 in round %d\n", cs.Round)
+			fmt.Printf("prevotes: %v\n", ps)
+			fmt.Printf("votes: %v\n", cs.Votes)
+			fmt.Printf("proposal: %v\n", cs.Proposal)
+			fmt.Printf("lock: %v\n", cs.LockedBlock)
+			fmt.Printf("commit: %v\n", cs.ValidBlock)
+			fmt.Printf("pl %v", pl)
+			return
+		}
 		cs.metrics.FullPrevoteDelay.With("proposer_address", cs.Validators.GetProposer().Address.String()).Set(pl[len(pl)-1].Timestamp.Sub(cs.Proposal.Timestamp).Seconds())
 	}
 }

@@ -165,14 +165,25 @@ func (vals *ValidatorSet) RescalePriorities(diffMax int64) {
 
 func (vals *ValidatorSet) incrementProposerPriority() *Validator {
 	for _, val := range vals.Validators {
+		votingPower := val.VotingPower
+		// If is zero, assume 1.
+		if votingPower == 0 {
+			votingPower = 1
+		}
 		// Check for overflow for sum.
-		newPrio := safeAddClip(val.ProposerPriority, val.VotingPower)
+		//newPrio := safeAddClip(val.ProposerPriority, val.VotingPower)
+		newPrio := safeAddClip(val.ProposerPriority, votingPower)
 		val.ProposerPriority = newPrio
 	}
 	// Decrement the validator with most ProposerPriority.
 	mostest := vals.getValWithMostPriority()
 	// Mind the underflow.
-	mostest.ProposerPriority = safeSubClip(mostest.ProposerPriority, vals.TotalVotingPower())
+	totalVotingPower := vals.TotalVotingPower()
+	if totalVotingPower == 0 {
+		totalVotingPower = 1
+	}
+	//mostest.ProposerPriority = safeSubClip(mostest.ProposerPriority, vals.TotalVotingPower())
+	mostest.ProposerPriority = safeSubClip(mostest.ProposerPriority, totalVotingPower)
 
 	return mostest
 }
@@ -379,6 +390,9 @@ func processChanges(origChanges []*Validator) (updates, removals []*Validator, e
 	updates = make([]*Validator, 0, len(changes))
 	var prevAddr Address
 
+	// We count validators with zero voting power and support up to 250 to exist (IDP-specific)
+	zeroVotingPowerCounter := 0
+
 	// Scan changes by address and append valid validators to updates or removals lists.
 	for _, valUpdate := range changes {
 		if bytes.Equal(valUpdate.Address, prevAddr) {
@@ -395,7 +409,15 @@ func processChanges(origChanges []*Validator) (updates, removals []*Validator, e
 				MaxTotalVotingPower, valUpdate.VotingPower)
 			return nil, nil, err
 		case valUpdate.VotingPower == 0:
-			removals = append(removals, valUpdate)
+			// TODO: uncomment and remove below after IDP.
+			//removals = append(removals, valUpdate)
+			zeroVotingPowerCounter++
+			// While we allow to have a 0 VP validator in the set, we don't allow more than 250 of them.
+			if zeroVotingPowerCounter < 250 {
+				updates = append(updates, valUpdate)
+			} else {
+				removals = append(removals, valUpdate)
+			}
 		default:
 			updates = append(updates, valUpdate)
 		}
@@ -706,7 +728,7 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 		// }
 	}
 
-	if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed {
+	if got, needed := talliedVotingPower, votingPowerNeeded; got <= needed && needed > 0 {
 		return ErrNotEnoughVotingPowerSigned{Got: got, Needed: needed}
 	}
 
@@ -756,7 +778,7 @@ func (vals *ValidatorSet) VerifyCommitLight(chainID string, blockID BlockID,
 		talliedVotingPower += val.VotingPower
 
 		// return as soon as +2/3 of the signatures are verified
-		if talliedVotingPower > votingPowerNeeded {
+		if talliedVotingPower > votingPowerNeeded || (talliedVotingPower == 0 && votingPowerNeeded == 0) {
 			return nil
 		}
 	}
@@ -816,7 +838,7 @@ func (vals *ValidatorSet) VerifyCommitLightTrusting(chainID string, commit *Comm
 
 			talliedVotingPower += val.VotingPower
 
-			if talliedVotingPower > votingPowerNeeded {
+			if talliedVotingPower > votingPowerNeeded || (talliedVotingPower == 0 && votingPowerNeeded == 0) {
 				return nil
 			}
 		}
